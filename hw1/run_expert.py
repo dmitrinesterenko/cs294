@@ -8,15 +8,17 @@ Example usage:
 
 Author of this script and included expert policies: Jonathan Ho (hoj@openai.com)
 """
-
+import pdb
 import pickle
 import tensorflow as tf
 import numpy as np
 import tf_util
 import gym
 import load_policy
+import seaborn as sns
+import matplotlib.pyplot as plt
 
-def main():
+def BatchGenerator():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('expert_policy_file', type=str)
@@ -37,7 +39,10 @@ def main():
         import gym
         env = gym.make(args.envname)
         max_steps = args.max_timesteps or env.spec.timestep_limit
-
+        if(max_steps > 1000):
+            print("the hopper will fall of the cliff after 1000 steps")
+            max_steps = 1000
+        print("max steps {} ".format(max_steps))
         returns = []
         observations = []
         actions = []
@@ -49,6 +54,7 @@ def main():
             steps = 0
             while not done:
                 action = policy_fn(obs[None,:])
+                pdb.set_trace()
                 observations.append(obs)
                 actions.append(action)
                 obs, r, done, _ = env.step(action)
@@ -56,7 +62,8 @@ def main():
                 steps += 1
                 if args.render:
                     env.render()
-                if steps % 100 == 0: print("%i/%i"%(steps, max_steps))
+                if steps % 100 == 0: print("{}/{} total reward {}, reward sample {}"
+                                        .format(steps, max_steps, totalr, r))
                 if steps >= max_steps:
                     break
             returns.append(totalr)
@@ -64,9 +71,60 @@ def main():
         print('returns', returns)
         print('mean return', np.mean(returns))
         print('std of return', np.std(returns))
-
+        fig = plt.figure()
+        sns.tsplot(time=range(args.num_rollouts), data=returns, color='b',
+linestyle=':')
+        plt.title("Reward over time")
+        plt.show()
         expert_data = {'observations': np.array(observations),
                        'actions': np.array(actions)}
+        yield np.array(observations), np.array(actions)
+
+        #TODO
+        # Now that we have the expert observations and actions we can train our
+        # own agent using the actions and their rewards as the labeled y which
+        # will be used for our own networks loss functions
+        #PLAN
+        # 1. Figure out the dimension of the outputs of my network (i.e. what
+        # does the hopper do?)
+        # Hopper has position, height and angle
+        # 2. Build our own network
+        # 3. Start with a random action
+        # 4. Calculate loss
+        # 5. Backpropagate the loss into the network
+        # 6. Keep training
+
+class Model():
+    def __init__(self):
+        self.lr = 0.01
+        self.l2 = 0.02
+        self.n_inputs = 11 ## 11 observations for the hopper
+        self.n_hidden = 4 # start small
+        self.n_outputs = 3 # thigh, leg, foot joints
+        self.initializer = tf.contrib.layers.variance_scaling_initializer()
+
+    def build(self):
+        X= tf.placeholder(tf.float32, shape=[None, self.n_inputs])
+        hidden = tf.layers.dense(X, self.n_hidden, activation=tf.nn.elu,
+kernel_initializer=self.initializer)
+        logits = tf.layers.dense(hidden, self.n_outputs,
+kernel_initializer=self.initializer)
+        outputs = tf.nn.softmax(logits)
+        self.actions = outputs
+        init = tf.global_variables_initializer()
+
+    def fit(self, X, y, batch_size, epoch):
+        loss = tf.nn.cross_entropy_with_logits(labels=y, logits=self.actions)
+        optimizer = tf.train.AdamOptimizer(self.lr)
+        grads_and_vars = optimizer.compute_gradients(loss)
+
+        with sess as Session.default():
+            loss, _ = sess.run(loss)
+
 
 if __name__ == '__main__':
-    main()
+    model = Model()
+    model.build()
+    for X, y in BatchGenerator():
+        model.train(X, y, batch_size=32, epoch=1)
+
