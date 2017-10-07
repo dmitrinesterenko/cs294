@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+
 
 """
 Code to load an expert policy and generate roll-out data for behavioral cloning.
@@ -17,6 +17,9 @@ import gym
 import load_policy
 import seaborn as sns
 import matplotlib.pyplot as plt
+from util import epoch
+
+
 
 def BatchGenerator():
     import argparse
@@ -54,7 +57,7 @@ def BatchGenerator():
             steps = 0
             while not done:
                 action = policy_fn(obs[None,:])
-                pdb.set_trace()
+                #pdb.set_trace()
                 observations.append(obs)
                 actions.append(action)
                 obs, r, done, _ = env.step(action)
@@ -72,10 +75,10 @@ def BatchGenerator():
         print('mean return', np.mean(returns))
         print('std of return', np.std(returns))
         fig = plt.figure()
-        sns.tsplot(time=range(args.num_rollouts), data=returns, color='b',
-linestyle=':')
+        sns.tsplot(time=range(args.num_rollouts), data=returns, color='b', linestyle=':')
         plt.title("Reward over time")
-        plt.show()
+        #plt.show()
+        plt.savefig("rewards_plt_{}.png".format(epoch()))
         expert_data = {'observations': np.array(observations),
                        'actions': np.array(actions)}
         yield np.array(observations), np.array(actions)
@@ -90,7 +93,7 @@ linestyle=':')
         # Hopper has position, height and angle
         # 2. Build our own network
         # 3. Start with a random action
-        # 4. Calculate loss
+        # 4. Calculate loss using the expert policy
         # 5. Backpropagate the loss into the network
         # 6. Keep training
 
@@ -104,27 +107,44 @@ class Model():
         self.initializer = tf.contrib.layers.variance_scaling_initializer()
 
     def build(self):
-        X= tf.placeholder(tf.float32, shape=[None, self.n_inputs])
+        X = tf.placeholder(tf.float32, shape=(20, self.n_inputs), name="X_marks_the_spot")
         hidden = tf.layers.dense(X, self.n_hidden, activation=tf.nn.elu,
 kernel_initializer=self.initializer)
         logits = tf.layers.dense(hidden, self.n_outputs,
 kernel_initializer=self.initializer)
         outputs = tf.nn.softmax(logits)
         self.actions = outputs
-        init = tf.global_variables_initializer()
+
+        #yp = tf.placeholder(tf.float32, shape=[None, 1, self.n_outputs], name="y_is_it")
+        #self.loss = tf.nn.softmax_cross_entropy_with_logits(labels=yp, logits=self.actions)
+        #optimizer = tf.train.AdamOptimizer(self.lr)
+        #self.grads_and_vars = optimizer.compute_gradients(self.loss)
+
+        self.init = tf.global_variables_initializer()
 
     def fit(self, X, y, batch_size, epoch):
-        loss = tf.nn.cross_entropy_with_logits(labels=y, logits=self.actions)
-        optimizer = tf.train.AdamOptimizer(self.lr)
-        grads_and_vars = optimizer.compute_gradients(loss)
+        # TODO should we take y[batch_size:] and self.actions[batch_size:] for
+        # each execution
+        # TODO these lines can be in build() as well and fit will just be the
+        # with tf.Session() ...
+        #import pdb; pdb.set_trace()
 
-        with sess as Session.default():
-            loss, _ = sess.run(loss)
+        #yp = tf.placeholder(tf.float32, shape=[None, 1, self.n_outputs], name="y_is_it")
+        #loss = tf.nn.softmax_cross_entropy_with_logits(labels=yp, logits=self.actions)
+        #optimizer = tf.train.AdamOptimizer(self.lr)
+        #grads_and_vars = optimizer.compute_gradients(loss)
+
+        with tf.Session() as sess:
+            sess.run(self.init)
+            import pdb; pdb.set_trace()
+            loss, _ = sess.run(self.actions, feed_dict={X: X})
+            print("Loss is {0}".format(loss))
 
 
 if __name__ == '__main__':
     model = Model()
     model.build()
     for X, y in BatchGenerator():
-        model.train(X, y, batch_size=32, epoch=1)
+        #model.train(X, y, batch_size=32, epoch=1)
+        model.fit(X, y, batch_size=32, epoch=1)
 
