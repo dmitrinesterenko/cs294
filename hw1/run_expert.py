@@ -1,5 +1,3 @@
-
-
 """
 Code to load an expert policy and generate roll-out data for behavioral cloning.
 Example usage:
@@ -12,26 +10,18 @@ import pdb
 import pickle
 import tensorflow as tf
 import numpy as np
-import tf_util
 import gym
-import load_policy
+import IPython.display as display
+import PIL.Image as Image
 import seaborn as sns
 import matplotlib.pyplot as plt
-from util import epoch
+
+import tf_util
+import load_policy
+from util import epoch, render_hopper, plot_environment, try_action, plot_animation
 
 
-
-def BatchGenerator():
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('expert_policy_file', type=str)
-    parser.add_argument('envname', type=str)
-    parser.add_argument('--render', action='store_true')
-    parser.add_argument("--max_timesteps", type=int)
-    parser.add_argument('--num_rollouts', type=int, default=20,
-                        help='Number of expert roll outs')
-    args = parser.parse_args()
-
+def BatchGenerator(args):
     print('loading and building expert policy')
     policy_fn = load_policy.load_policy(args.expert_policy_file)
     print('loaded and built')
@@ -41,6 +31,14 @@ def BatchGenerator():
 
         import gym
         env = gym.make(args.envname)
+        # TRIAL
+        #try_action(env, [0,0,1])
+        #try_action(env, [0,1,0])
+        #try_action(env, [1,0,0])
+        #END TRIAL
+
+        print("The action space is {0}".format(env.action_space))
+
         max_steps = args.max_timesteps or env.spec.timestep_limit
         if(max_steps > 1000):
             print("the hopper will fall of the cliff after 1000 steps")
@@ -57,9 +55,11 @@ def BatchGenerator():
             steps = 0
             while not done:
                 action = policy_fn(obs[None,:])
-                #pdb.set_trace()
                 observations.append(obs)
-                actions.append(action)
+                # This was actions.append(action) which an array of [?,1,3]
+                # which then contradicted what is produced in my own model which
+                # produced for the actions [?,3]
+                actions.append(action[0])
                 obs, r, done, _ = env.step(action)
                 totalr += r
                 steps += 1
@@ -98,53 +98,70 @@ def BatchGenerator():
         # 6. Keep training
 
 class Model():
-    def __init__(self):
+    def __init__(self, args):
         self.lr = 0.01
         self.l2 = 0.02
         self.n_inputs = 11 ## 11 observations for the hopper
         self.n_hidden = 4 # start small
         self.n_outputs = 3 # thigh, leg, foot joints
         self.initializer = tf.contrib.layers.variance_scaling_initializer()
+        self.env = gym.make(args.envname)
 
     def build(self):
-        X = tf.placeholder(tf.float32, shape=(20, self.n_inputs), name="X_marks_the_spot")
-        hidden = tf.layers.dense(X, self.n_hidden, activation=tf.nn.elu,
+        self.X = tf.placeholder(tf.float32, shape=(None, self.n_inputs), name="X_marks_the_spot")
+        self.y = tf.placeholder(tf.float32, shape=[None, self.n_outputs], name="y_is_it")
+
+        hidden = tf.layers.dense(self.X, self.n_hidden, activation=tf.nn.elu,
 kernel_initializer=self.initializer)
         logits = tf.layers.dense(hidden, self.n_outputs,
 kernel_initializer=self.initializer)
         outputs = tf.nn.softmax(logits)
         self.actions = outputs
 
-        #yp = tf.placeholder(tf.float32, shape=[None, 1, self.n_outputs], name="y_is_it")
-        #self.loss = tf.nn.softmax_cross_entropy_with_logits(labels=yp, logits=self.actions)
-        #optimizer = tf.train.AdamOptimizer(self.lr)
-        #self.grads_and_vars = optimizer.compute_gradients(self.loss)
+        self.loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.y, logits=self.actions)
+        optimizer = tf.train.AdamOptimizer(self.lr)
+        self.grads_and_vars = optimizer.compute_gradients(self.loss)
 
         self.init = tf.global_variables_initializer()
 
-    def fit(self, X, y, batch_size, epoch):
+    def fit(self, X_train, y_train, batch_size, epoch, n_max_steps=1000):
         # TODO should we take y[batch_size:] and self.actions[batch_size:] for
         # each execution
-        # TODO these lines can be in build() as well and fit will just be the
-        # with tf.Session() ...
-        #import pdb; pdb.set_trace()
-
-        #yp = tf.placeholder(tf.float32, shape=[None, 1, self.n_outputs], name="y_is_it")
-        #loss = tf.nn.softmax_cross_entropy_with_logits(labels=yp, logits=self.actions)
-        #optimizer = tf.train.AdamOptimizer(self.lr)
-        #grads_and_vars = optimizer.compute_gradients(loss)
-
+        frames = []
         with tf.Session() as sess:
             sess.run(self.init)
-            import pdb; pdb.set_trace()
-            loss, _ = sess.run(self.actions, feed_dict={X: X})
-            print("Loss is {0}".format(loss))
+            obs = self.env.reset()
+            for i in range(n_max_steps):
+                img = render_hopper(self.env, obs)
+                frames.append(img)
+                # FUN FACT: if you try to create a feed_dict like {X: X_train} where
+                # X is not actually in scope in this function you will get a strange
+                # seeming error that refers to Not a hashable type 'np.ndarray'
+                feed_dict = {self.X: X_train, self.y: y_train}
+                loss = sess.run(self.loss, feed_dict=feed_dict )
+                grads_and_vars = sess.run(self.grads_and_vars, feed_dict=feed_dict)
+                action = sess.run(self.actions)
+                obs, reward, done, info = self.env.step(action)
+                import pdb; pdb.set_trace()
+
+                print("Loss {0}".format(np.mean(loss)))
+                #print("Grads and vars are {0}".format(grads_and_vars))
 
 
 if __name__ == '__main__':
-    model = Model()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('expert_policy_file', type=str)
+    parser.add_argument('envname', type=str)
+    parser.add_argument('--render', action='store_true')
+    parser.add_argument("--max_timesteps", type=int)
+    parser.add_argument('--num_rollouts', type=int, default=20,
+                        help='Number of expert roll outs')
+    args = parser.parse_args()
+
+    model = Model(args)
     model.build()
-    for X, y in BatchGenerator():
-        #model.train(X, y, batch_size=32, epoch=1)
-        model.fit(X, y, batch_size=32, epoch=1)
+    # The shape is (10*num_rollouts, 11) for X and (10*num_rollouts, 3) for y
+    for X, y in BatchGenerator(args):
+        model.fit(X, y, batch_size=32, epoch=20)
 
