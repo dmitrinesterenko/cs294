@@ -16,3 +16,7 @@ In `experts/`, the provided expert policies are:
 * Walker2d-v1.pkl
 
 The name of the pickle file corresponds to the name of the gym environment.
+
+## Perfomance
+Check out output/nn_performance_{steps}.png for the results on the training from
+the expert
