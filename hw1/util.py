@@ -41,9 +41,14 @@ def update_scene(num, frames, patch):
     patch.set_data(frames[num])
     return patch
 
-def plot_animation(frames, repeat=False, interval=40):
+def plot_animation(frames, repeat=False, interval=40, step=0):
     plt.close()  # or else nbagg sometimes plots in the previous cell
     fig = plt.figure()
     patch = plt.imshow(frames[0])
     plt.axis('off')
-    return animation.FuncAnimation(fig, update_scene, fargs=(frames, patch), frames=len(frames), repeat=repeat, interval=interval)
+    ani = animation.FuncAnimation(fig, update_scene, fargs=(frames, patch), frames=len(frames), repeat=repeat, interval=interval)
+    Writer = animation.writers['ffmpeg']
+    writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=1800)
+    ani.save("output/hopper_{0}.mp4".format(step), writer=writer)
+
+
