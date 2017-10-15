@@ -40,7 +40,9 @@ def try_action(env, action):
 def update_scene(num, frames, patch):
     patch.set_data(frames[num])
     return patch
-
+# animation hints were from here
+# https://matplotlib.org/examples/animation/basic_example_writer.html
+# and the Geron Tensorflow book
 def plot_animation(frames, repeat=False, interval=40, step=0):
     plt.close()  # or else nbagg sometimes plots in the previous cell
     fig = plt.figure()
