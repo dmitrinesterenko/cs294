@@ -1,0 +1,2 @@
+model_checkpoint_path: "nn_0.01_0.02_4"
+all_model_checkpoint_paths: "nn_0.01_0.02_4"
