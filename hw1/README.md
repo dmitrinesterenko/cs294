@@ -20,3 +20,7 @@ The name of the pickle file corresponds to the name of the gym environment.
 ## Perfomance
 Check out output/nn_performance_{steps}.png for the results on the training from
 the expert
+
+Example loss and reward after 9600 training steps
+Step 9600: Loss 0.446856677532, Reward -1784.92529398
+#

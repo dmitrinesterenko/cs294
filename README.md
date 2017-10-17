@@ -1,5 +1,5 @@
 ### Introduction
-This is the Berkley Reinforcement learning class cs294 in the Spring of 2017
+This is the Berkley Reinforcement learning class cs294 in the Fall of 2017
 The course lectures and assignments are
 [here](http://rll.berkeley.edu/deeprlcourse/#lectures)
 The videos of the lectures are
