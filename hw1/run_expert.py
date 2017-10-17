@@ -7,16 +7,18 @@ Example usage:
 Author of this script and included expert policies: Jonathan Ho (hoj@openai.com)
 """
 X_SERVER=True
+import sys
+import os
 import pdb
 import pickle
 import tensorflow as tf
 import numpy as np
 import gym
 import IPython.display as display
-import PIL.Image as Image
-import seaborn as sns
 import pandas as pd
 try:
+     import PIL.Image as Image
+     import seaborn as sns
      import matplotlib.pyplot as plt
 except ImportError:
      X_SERVER=False
@@ -80,11 +82,12 @@ def BatchGenerator(args):
         print('returns', returns)
         print('mean return', np.mean(returns))
         print('std of return', np.std(returns))
-        fig = plt.figure()
-        sns.tsplot(time=range(args.num_rollouts), data=returns, color='b', linestyle=':')
-        plt.title("Reward over time")
-        #plt.show()
-        plt.savefig("output/rewards_plt_{}.png".format(epoch()))
+        if X_SERVER:
+            fig = plt.figure()
+            sns.tsplot(time=range(args.num_rollouts), data=returns, color='b', linestyle=':')
+            plt.title("Reward over time")
+            #plt.show()
+            plt.savefig("output/rewards_plt_{}.png".format(epoch()))
         expert_data = {'observations': np.array(observations),
                        'actions': np.array(actions)}
         yield np.array(observations), np.array(actions)
@@ -113,6 +116,9 @@ class Model():
         self.initializer = tf.contrib.layers.variance_scaling_initializer()
         self.env = gym.make(args.envname)
         self.render = args.render
+        self.weights_path = "weights/nn_{0}_{1}_{2}".format(self.lr, self.l2,
+self.n_hidden)
+
 
     def build(self):
         self.X = tf.placeholder(tf.float32, shape=(None, self.n_inputs), name="X_marks_the_spot")
@@ -131,18 +137,22 @@ kernel_initializer=self.initializer)
         self.init = tf.global_variables_initializer()
 
     def plot(self, steps=0, losses=[], rewards=[]):
-        fig = plt.figure()
-        plt.title("Loss and reward over steps trained")
-        plt.axis("off")
+        if X_SERVER:
+            fig = plt.figure()
+            plt.title("Loss and reward over steps trained")
+            plt.axis("off")
 
-        #df = pd.DataFrame()
-        #df['losses'] = losses
-        #df['rewards'] = rewards
-        fig.add_subplot(1,2,1)
-        sns.tsplot(time=range(steps), data=losses, linestyle='-')
-        fig.add_subplot(1,2,2)
-        sns.tsplot(time=range(steps), data=rewards, linestyle="-")
-        plt.savefig("output/nn_performance_{}.png".format(steps))
+            #df = pd.DataFrame()
+            #df['losses'] = losses
+            #df['rewards'] = rewards
+            fig.add_subplot(1,2,1)
+            sns.tsplot(time=range(steps), data=losses, linestyle='-')
+            fig.add_subplot(1,2,2)
+            sns.tsplot(time=range(steps), data=rewards, linestyle="-")
+            plt.savefig("output/nn_performance_{}.png".format(steps))
+        else:
+            print("The reward {0} and loss {1} means".format(np.mean(rewards),
+np.mean(losses)))
 
 
     def fit(self, X_train, y_train, batch_size, epoch, n_max_steps=1000,
@@ -198,7 +208,12 @@ verbose=100, sample=500):
 
                 if step % verbose == 0:
                     print("Step {0}: Loss {1}, Reward {2}".format(step, np.mean(loss), reward_cum))
-                if self.render and step % sample == 0:
+                    saver = tf.train.Saver()
+                    if not os.path.exists(self.weights_path):
+                        os.makedirs(self.weights_path)
+                    saver.save(sess, self.weights_path)
+
+                if X_SERVER and self.render and step % sample == 0:
                     animation = plot_animation(frames, repeat=True, step=step)
                     #plt.show()
             self.plot(steps=n_max_steps, rewards=rewards, losses=losses)
@@ -220,7 +235,7 @@ if __name__ == '__main__':
 
     # The shape is (10*num_rollouts, 11) for X and (10*num_rollouts, 3) for y
     for X, y in BatchGenerator(args):
-        model.fit(X, y, batch_size=32, epoch=20, n_max_steps=100, sample=50, verbose=10)
-        #model.fit(X, y, batch_size=32, epoch=20, n_max_steps=1000, sample=200, verbose=100)
+        #model.fit(X, y, batch_size=32, epoch=20, n_max_steps=100, sample=50, verbose=10)
+        model.fit(X, y, batch_size=32, epoch=20, n_max_steps=10000, sample=1000, verbose=100)
 
 
