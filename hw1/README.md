@@ -24,3 +24,7 @@ the expert
 Example loss and reward after 9600 training steps
 Step 9600: Loss 0.446856677532, Reward -1784.92529398
 #
+
+Training with data from 4 rollouts and 500 steps in each rollout gives results of
+a Loss 0.446852952242, Reward -1785.4013682 (not that good!)
+
