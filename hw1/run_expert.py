@@ -1,15 +1,14 @@
 """
 Code to load an expert policy and generate roll-out data for behavioral cloning.
 Example usage:
-    python run_expert.py experts/Humanoid-v1.pkl Humanoid-v1 --render \
+    python run_expert.py experts/RoboschoolHumanoid-v1.py --render \
             --num_rollouts 20
-
-Author of this script and included expert policies: Jonathan Ho (hoj@openai.com)
 """
 X_SERVER=True
 import sys
 import os
 import pdb
+import argparse
 import pickle
 import tensorflow as tf
 import numpy as np
@@ -27,70 +26,65 @@ except ImportError:
 import tf_util
 import load_policy
 from util import epoch, render_hopper, plot_environment, try_action, plot_animation
-
+import importlib
 
 def BatchGenerator(args):
-    print('loading and building expert policy')
-    policy_fn = load_policy.load_policy(args.expert_policy_file)
-    print('loaded and built')
-
-    with tf.Session():
-        tf_util.initialize()
-
-        import gym
-        env = gym.make(args.envname)
-        # TRIAL
+    print('loading expert policy')
+    module_name = args.expert_policy_file.replace('/', '.')
+    if module_name.endswith('.py'):
+        module_name = module_name[:-3]
+    policy_module = importlib.import_module(module_name)
+    print('loaded')
+	# TRIAL
         #try_action(env, [0,0,1])
         #try_action(env, [0,1,0])
         #try_action(env, [1,0,0])
         #END TRIAL
+    
+    env, policy = policy_module.get_env_and_policy()
+    print("The action space is {0}".format(env.action_space))
 
-        print("The action space is {0}".format(env.action_space))
+    max_steps = args.max_timesteps or env.spec.timestep_limit
 
-        max_steps = args.max_timesteps or env.spec.timestep_limit
-        if(max_steps > 1000):
-            print("the hopper will fall of the cliff after 1000 steps")
-            max_steps = 1000
-        print("max steps {} ".format(max_steps))
-        returns = []
-        observations = []
-        actions = []
-        for i in range(args.num_rollouts):
-            print('iter', i)
-            obs = env.reset()
-            done = False
-            totalr = 0.
-            steps = 0
-            while not done:
-                action = policy_fn(obs[None,:])
-                observations.append(obs)
-                # This was actions.append(action) which an array of [?,1,3]
-                # which then contradicted what is produced in my own model which
-                # produced for the actions [?,3]
-                actions.append(action[0])
-                obs, r, done, _ = env.step(action)
-                totalr += r
-                steps += 1
-                if args.render:
-                    env.render()
-                if steps % 100 == 0: print("{}/{} total reward {}, reward sample {}"
-                                        .format(steps, max_steps, totalr, r))
-                if steps >= max_steps:
-                    break
-            returns.append(totalr)
+    returns = []
+    observations = []
+    actions = []
+    # if args.max_timesteps > 1000:
+    #	print('you will possibly falls off the edge of the world')
+    for i in range(args.num_rollouts):
+        print('iter', i)
+        obs = env.reset()
+        done = False
+        totalr = 0.
+        steps = 0
+        while not done:
+            action = policy.act(obs)
+            observations.append(obs)
+            actions.append(action)
+            obs, r, done, _ = env.step(action)
+            totalr += r
+            steps += 1
+            if args.render:
+                env.render()
+            if steps % 100 == 0: print("%i/%i"%(steps, max_steps))
+            if steps >= max_steps:
+                break
+        returns.append(totalr)
 
-        print('returns', returns)
-        print('mean return', np.mean(returns))
-        print('std of return', np.std(returns))
-        if X_SERVER:
-            fig = plt.figure()
-            sns.tsplot(time=range(args.num_rollouts), data=returns, color='b', linestyle=':')
-            plt.title("Reward over time")
-            #plt.show()
-            plt.savefig("output/rewards_plt_{}.png".format(epoch()))
-        expert_data = {'observations': np.array(observations),
-                       'actions': np.array(actions)}
-        yield np.array(observations), np.array(actions)
+    print('returns', returns)
+    print('mean return', np.mean(returns))
+    print('std of return', np.std(returns))
+	
+    if X_SERVER:
+        fig = plt.figure()
+        sns.tsplot(time=range(args.num_rollouts), data=returns, color='b', linestyle=':')
+        plt.title("Reward over time")
+        #plt.show()
+        plt.savefig("output/rewards_plt_{}.png".format(epoch()))
+
+    expert_data = {'observations': np.array(observations),
+                    'actions': np.array(actions)}
+    yield np.array(observations), np.array(actions)
 
         #TODO
         # Now that we have the expert observations and actions we can train our
