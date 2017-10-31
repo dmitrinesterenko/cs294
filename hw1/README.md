@@ -1,6 +1,7 @@
 # CS294-112 HW 1: Imitation Learning
 
-Dependencies: TensorFlow, OpenAI Gym, Roboschool v1.1
+Dependencies: TensorFlow, OpenAI Gym, Roboschool v1.1, 
+Apt install dependencies: python3-tk
 
 The only file that you need to look at is `run_expert.py`, which is code to load up an expert policy, run a specified number of roll-outs, and save out data.
 

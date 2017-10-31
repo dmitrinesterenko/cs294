@@ -23,8 +23,6 @@ except ImportError:
      X_SERVER=False
      print("No X support")
 
-import tf_util
-import load_policy
 from util import epoch, render_hopper, plot_environment, try_action, plot_animation
 import importlib
 
