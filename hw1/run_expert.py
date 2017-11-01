@@ -13,6 +13,7 @@ import pickle
 import tensorflow as tf
 import numpy as np
 import gym
+import roboschool
 import IPython.display as display
 import pandas as pd
 try:
@@ -81,7 +82,9 @@ def BatchGenerator(args):
         plt.savefig("output/rewards_plt_{}.png".format(epoch()))
 
     expert_data = {'observations': np.array(observations),
-                    'actions': np.array(actions)}
+                    'actions': np.array(actions), 
+		   'env': env}
+
     yield np.array(observations), np.array(actions)
 
         #TODO
@@ -102,10 +105,11 @@ class Model():
     def __init__(self, args):
         self.lr = 0.01
         self.l2 = 0.02
-        self.n_inputs = 11 ## 11 observations for the hopper
+        self.n_inputs = 15 ##15 obs on the roboschool hopper 11 observations for the hopper
         self.n_hidden = 4 # start small
         self.n_outputs = 3 # thigh, leg, foot joints
         self.initializer = tf.contrib.layers.variance_scaling_initializer()
+        print("Env name {0}".format(args.envname))	
         self.env = gym.make(args.envname)
         self.render = args.render
         self.weights_path = "weights/nn_{0}_{1}_{2}".format(self.lr, self.l2,
@@ -230,7 +234,7 @@ if __name__ == '__main__':
 
     model = Model(args)
     model.build()
-
+    
     # The shape is (10*num_rollouts, 11) for X and (10*num_rollouts, 3) for y
     for X, y in BatchGenerator(args):
         #model.fit(X, y, batch_size=32, epoch=20, n_max_steps=100, sample=50, verbose=10)

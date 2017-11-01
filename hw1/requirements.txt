@@ -1,5 +1,7 @@
-gym
-roboschool
-IPython
-pandas
-matplotlib
+gym~=0.9
+#[-e] $ROBOSCHOOL_PATH
+IPython~=6.2
+pandas~=0.21
+matplotlib~=2.1
+pillow~=4.3
+seaborn~=0.8
