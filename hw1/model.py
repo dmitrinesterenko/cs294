@@ -87,16 +87,24 @@ verbose=100, sample=500):
         with tf.Session() as sess:
             sess.run(self.init)
             obs = self.env.reset()
-            for step in range(n_max_steps):
+            batch_size = 50
+
+            for step in range(X_train.shape[0]/batch_size):
                 #img = render_hopper(self.env, obs)
                 #frames.append(img)
+
                 # FUN FACT: if you try to create a feed_dict like {X: X_train} where
                 # X is not actually in scope in this function you will get a strange
                 # seeming error that refers to Not a hashable type 'np.ndarray'
                 # thus it's important to actually refer to self.X (or however you
                 # would access the placeholder variable in the current function
                 # scope)
-                feed_dict = {self.X: X_train, self.y: y_train}
+
+                #TODO: need to run the batches on X_train[batch_num-1*batch_size:batch_num*batch_size]
+                feed_dict = {
+                    self.X: X_train[step*batch_size:(step+1)*batch_size],
+                    self.y: y_train[step*batch_size:(step+1)*batch_size]
+                }
                 loss = sess.run(self.loss, feed_dict=feed_dict )
                 losses.append(np.mean(loss))
 
@@ -111,40 +119,37 @@ verbose=100, sample=500):
                 # action.shape if (1000,3) for the Hopper, 1000 actions are
                 # suggested with each action being a 3 dimensional action
                 actions = sess.run(self.actions, feed_dict=feed_dict)
-                batch_size = 1000
 
                 # Do a run through of the current environment with the predicted
                 # actions (exciting and is the part that we will be optimizing
                 # and learning how to construct actions given an experts
                 # roll-out)
-
-               #TODO: need to run the batches on X_train[batch_num-1*batch_size:batch_num*batch_size]
-                for batch_num in range(actions.shape[0]/batch_size):
-                    frames = []
-                    reward_cum = 0
-                    for i in range(len(batch_size)):
-                        obs, reward, done, info = self.env.step(actions)
-                        reward_cum += reward
-                        if (self.render and step % sample == 0) or step == n_max_steps -1 :
-                            img = render_hopper(self.env, obs)
-                            frames.append(img)
-                        #if done:
-                        #    print("We are done at step {0}".format(i))
-                        #    break
+                # TODO: need to make sure this should be run inside of each mini-batch
+                frames = []
+                reward_cum = 0
+                for i in range(actions.shape[0]):
+                    obs, reward, done, info = self.env.step(actions[i])
+                    reward_cum += reward
+                    if (self.render and step % sample == 0) or step == n_max_steps -1 :
+                        img = render_hopper(self.env, obs)
+                        frames.append(img)
+                    if done:
+                        print("We are done at step {0}".format(i))
+                    #    break
                 rewards.append(reward_cum)
 
-                if step % verbose == 0:
-                    print("Step {0}: Loss {1}, Reward {2}".format(step, np.mean(loss), reward_cum))
+                if step*batch_size % verbose == 0:
+                    print("Step {0}: Loss {1}, Reward {2}".format(step*batch_size, np.mean(loss), reward_cum))
                     saver = tf.train.Saver()
                     if not os.path.exists(self.weights_path):
                         os.makedirs(self.weights_path)
                     saver.save(sess, self.weights_path)
 
-                if X_SERVER and self.render and step % sample == 0:
+                if X_SERVER and self.render and step*batch_size % sample == 0:
                     animation = plot_animation(frames, repeat=True, step=step)
                     #plt.show()
-                if step == n_max_steps - 1:
+                if step*batch_size == X_train.shape[0]:
                     animation = plot_animation(frames, repeat=True, step=step)
-            self.plot(steps=n_max_steps, rewards=rewards, losses=losses)
+            self.plot(steps=step*batch_size, rewards=rewards, losses=losses)
 
 
