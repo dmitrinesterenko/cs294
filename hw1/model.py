@@ -1,4 +1,6 @@
 X_SERVER=True
+import os
+import pdb
 import tensorflow as tf
 import gym
 import roboschool
@@ -10,6 +12,7 @@ try:
 except ImportError:
      X_SERVER=False
      print("No X support")
+from util import render_hopper, plot_animation
 
 
 
@@ -43,6 +46,7 @@ class Model():
 self.n_hidden)
 
 
+
     def build(self):
         self.X = tf.placeholder(tf.float32, shape=(None, self.n_inputs), name="X_marks_the_spot")
         self.y = tf.placeholder(tf.float32, shape=(None, self.n_outputs), name="y_is_it")
@@ -55,7 +59,7 @@ kernel_initializer=self.initializer)
 
         self.loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.y, logits=self.actions)
         self.optimizer = tf.train.AdamOptimizer(self.lr)
-        self.grads_and_vars = self.optimizer.compute_gradients(self.loss)
+        #self.grads_and_vars = self.optimizer.compute_gradients(self.loss)
         self.minimize = self.optimizer.minimize(self.loss)
         self.init = tf.global_variables_initializer()
 
@@ -80,18 +84,16 @@ np.mean(losses)))
 
     def fit(self, X_train, y_train, batch_size, epoch, n_max_steps=1000,
 verbose=100, sample=500):
-        # TODO should we take y[batch_size:] and self.actions[batch_size:] for
-        # each execution
-        rewards = []
         losses = []
+        rewards = []
+        reward_cum = 0
+
         with tf.Session() as sess:
             sess.run(self.init)
             obs = self.env.reset()
-            batch_size = 50
-
-            for step in range(X_train.shape[0]/batch_size):
-                #img = render_hopper(self.env, obs)
-                #frames.append(img)
+            batch_size = 400
+            steps = int(X_train.shape[0]/batch_size)
+            for step in range(steps):
 
                 # FUN FACT: if you try to create a feed_dict like {X: X_train} where
                 # X is not actually in scope in this function you will get a strange
@@ -109,47 +111,59 @@ verbose=100, sample=500):
                 losses.append(np.mean(loss))
 
                 #grads_and_vars = sess.run(self.grads_and_vars, feed_dict=feed_dict)
+                # Run the optimizer to learn better loss
                 optimize = sess.run(self.minimize, feed_dict=feed_dict)
 
-                # Run the optimizer to learn better loss
-                #...
                 # Note action here is an array of size equal to the roll-in size
                 # of X so it's not a single generated action
                 # Example: with a 1000 step roll-out of the expert the
                 # action.shape if (1000,3) for the Hopper, 1000 actions are
                 # suggested with each action being a 3 dimensional action
-                actions = sess.run(self.actions, feed_dict=feed_dict)
 
-                # Do a run through of the current environment with the predicted
-                # actions (exciting and is the part that we will be optimizing
-                # and learning how to construct actions given an experts
-                # roll-out)
-                # TODO: need to make sure this should be run inside of each mini-batch
-                frames = []
-                reward_cum = 0
-                for i in range(actions.shape[0]):
-                    obs, reward, done, info = self.env.step(actions[i])
-                    reward_cum += reward
-                    if (self.render and step % sample == 0) or step == n_max_steps -1 :
-                        img = render_hopper(self.env, obs)
-                        frames.append(img)
-                    if done:
-                        print("We are done at step {0}".format(i))
-                    #    break
-                rewards.append(reward_cum)
+                # actions = sess.run(self.actions, feed_dict=feed_dict)
+                # rewards = self.run(actions, step=step, render=false)
+                # reward_cum = np.sum(rewards)
 
                 if step*batch_size % verbose == 0:
                     print("Step {0}: Loss {1}, Reward {2}".format(step*batch_size, np.mean(loss), reward_cum))
-                    saver = tf.train.Saver()
-                    if not os.path.exists(self.weights_path):
-                        os.makedirs(self.weights_path)
-                    saver.save(sess, self.weights_path)
+                    self.save_weights(sess)
 
-                if X_SERVER and self.render and step*batch_size % sample == 0:
-                    animation = plot_animation(frames, repeat=True, step=step)
-                    #plt.show()
-                if step*batch_size == X_train.shape[0]:
-                    animation = plot_animation(frames, repeat=True, step=step)
-            self.plot(steps=step*batch_size, rewards=rewards, losses=losses)
+            # this works when we have rewards # self.plot(steps=len(rewards), rewards=rewards, losses=losses)
+            self.plot(steps=len(losses), rewards=losses, losses=losses)
 
+    def run(self, actions, step=0, render=False):
+        """
+        Run through of the current environment with the predicted
+        actions (exciting and is the part that we will be optimizing
+        and learning how to construct actions given an experts
+        roll-out)
+
+        actions : array of actions to take
+        step: what step of training we are on, this is used primarily for noting
+            which training step we are on when saving the rendered animation
+        render: boolean of whether to render the animation
+
+        """
+        frames = []
+        rewards = []
+        reward_cum = 0
+        for i in range(actions.shape[0]):
+            obs, reward, done, info = self.env.step(actions[i])
+            reward_cum += reward
+            if render:
+                img = render_hopper(self.env, obs)
+                frames.append(img)
+            #if done:
+            #    print("We are done at step {0}".format(i))
+            #    break
+        rewards.append(reward_cum)
+        if render:
+            animation = plot_animation(frames, repeat=True, step=step)
+        return rewards
+
+    def save_weights(self, sess):
+        saver = tf.train.Saver()
+        if not os.path.exists(self.weights_path):
+            os.makedirs(self.weights_path)
+        saver.save(sess, self.weights_path)
 
