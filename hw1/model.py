@@ -33,8 +33,8 @@ from util import render_hopper, plot_animation
 class Model():
     """Class that defines the model that learns from the expert behavior"""
     def __init__(self, args):
-        self.lr = 0.01
-        self.l2 = 0.02
+        self.lr = 0.1
+        self.l2 = 0.05
         self.n_inputs = 15 ##15 obs on the roboschool hopper 11 observations for the hopper
         self.n_hidden = 4 # start small
         self.n_outputs = 3 # thigh, leg, foot joints
@@ -42,8 +42,8 @@ class Model():
         print("Env name {0}".format(args.envname))	
         self.env = gym.make(args.envname)
         self.render = args.render
-        self.weights_path = "weights/nn_{0}_{1}_{2}".format(self.lr, self.l2,
-self.n_hidden)
+        self.nn_name = "nn_{0}_{1}_{2}".format(self.lr, self.l2, self.n_hidden)
+        self.weights_path = "weights/{0}".format(self.nn_name)
 
 
 
@@ -59,7 +59,7 @@ kernel_initializer=self.initializer)
 
         self.loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.y, logits=self.actions)
         self.optimizer = tf.train.AdamOptimizer(self.lr)
-        #self.grads_and_vars = self.optimizer.compute_gradients(self.loss)
+        self.grads_and_vars = self.optimizer.compute_gradients(self.loss)
         self.minimize = self.optimizer.minimize(self.loss)
         self.init = tf.global_variables_initializer()
 
@@ -75,8 +75,8 @@ kernel_initializer=self.initializer)
             fig.add_subplot(1,2,1)
             sns.tsplot(time=range(steps), data=losses, linestyle='-')
             fig.add_subplot(1,2,2)
-            sns.tsplot(time=range(steps), data=rewards, linestyle="-")
-            plt.savefig("output/nn_performance_{}.png".format(steps))
+            sns.tsplot(time=range(len(rewards)), data=np.reshape(rewards, -1), linestyle="-")
+            plt.savefig("output/{0}.png".format(self.nn_name))
         else:
             print("The reward {0} and loss {1} means".format(np.mean(rewards),
 np.mean(losses)))
@@ -91,7 +91,7 @@ verbose=100, sample=500):
         with tf.Session() as sess:
             sess.run(self.init)
             obs = self.env.reset()
-            batch_size = 400
+            batch_size = 600 # if the num_steps == 300 then this batch is 2 rollouts
             steps = int(X_train.shape[0]/batch_size)
             for step in range(steps):
 
@@ -125,11 +125,13 @@ verbose=100, sample=500):
                 # reward_cum = np.sum(rewards)
 
                 if step*batch_size % verbose == 0:
-                    print("Step {0}: Loss {1}, Reward {2}".format(step*batch_size, np.mean(loss), reward_cum))
+                    rewards_return = self.run(sess.run(self.actions, feed_dict=feed_dict), step, render=False)
+                    rewards.append(rewards_return)
+                    print("Step {0}/{3}: Loss {1}, Reward {2}".format(step*batch_size, np.mean(loss), np.sum(rewards_return), steps*batch_size))
                     self.save_weights(sess)
 
             # this works when we have rewards # self.plot(steps=len(rewards), rewards=rewards, losses=losses)
-            self.plot(steps=len(losses), rewards=losses, losses=losses)
+            self.plot(steps=len(losses), rewards=rewards, losses=losses)
 
     def run(self, actions, step=0, render=False):
         """
