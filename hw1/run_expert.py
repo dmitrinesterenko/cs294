@@ -16,6 +16,7 @@ import gym
 import roboschool
 import IPython.display as display
 import pandas as pd
+from sklearn.utils import shuffle
 try:
      import PIL.Image as Image
      import seaborn as sns
@@ -40,7 +41,7 @@ def BatchGenerator(args):
         #try_action(env, [0,1,0])
         #try_action(env, [1,0,0])
         #END TRIAL
-    
+
     env, policy = policy_module.get_env_and_policy()
     print("The action space is {0}".format(env.action_space))
 
@@ -82,11 +83,14 @@ def BatchGenerator(args):
         #plt.show()
         plt.savefig("output/rewards_plt_{}.png".format(epoch()))
 
+    #np.random.shuffle(observations)
+    #np.random.shuffle(actions)
+    observations, actions = shuffle(observations, actions)
     expert_data = {'observations': np.array(observations),
-                    'actions': np.array(actions), 
+                    'actions': np.array(actions),
 		   'env': env}
 
-    yield np.array(observations), np.array(actions)
+    yield expert_data['observations'], expert_data['actions']
 
 
 if __name__ == '__main__':
@@ -98,14 +102,29 @@ if __name__ == '__main__':
     parser.add_argument("--max_timesteps", type=int)
     parser.add_argument('--num_rollouts', type=int, default=20,
                         help='Number of expert roll outs')
+    parser.add_argument('--epochs', type=int, default=10, help='Number of epochs to train for')
     args = parser.parse_args()
 
     model = Model(args)
     model.build()
-    
-    # The shape is (10*num_rollouts, 11) for X and (10*num_rollouts, 3) for y
-    for X, y in BatchGenerator(args):
-        #model.fit(X, y, batch_size=32, epoch=20, n_max_steps=100, sample=50, verbose=10)
-        model.fit(X, y, batch_size=32, epoch=20, n_max_steps=1000, sample=500, verbose=100)
 
+    # The shape is (10*num_rollouts, 11) for X and (10*num_rollouts, 3) for y
+    all_loss_history = []
+    prev_epoch_loss = float('inf')
+    anneal_threshold = 0.99
+    anneal_by = 1.5
+    for X, y in BatchGenerator(args):
+        # TODO:
+        # keep some of the X and y for validation and test sets
+        for epoch in range(args.epochs):
+            losses, rewards = model.fit(X, y, batch_size=32, epoch=epoch, n_max_steps=1000, sample=500, verbose=100)
+            epoch_loss = np.mean(losses)
+            print("mean epoch loss {0} and reward {1}".format(epoch_loss, np.mean(rewards)))
+
+            all_loss_history.extend(losses)
+            if(epoch_loss>prev_epoch_loss*anneal_threshold):
+                    # should update learning rate as our loss is not decreasing enough between epochs
+                    print("adjusting learning rate {0}".format(model.lr/anneal_by))
+                    model.adjust_learning_rate(model.lr/anneal_by)
+            prev_epoch_loss = epoch_loss
 

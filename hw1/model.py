@@ -33,9 +33,9 @@ from util import render_hopper, plot_animation
 class Model():
     """Class that defines the model that learns from the expert behavior"""
     def __init__(self, args):
-        self.lr = 0.1
+        self.lr = 0.01
         self.l2 = 0.05
-        self.n_inputs = 15 ##15 obs on the roboschool hopper 11 observations for the hopper
+        self.n_inputs = 15 ##15 obs on the roboschool hopper, 11 observations for the mujoco hopper
         self.n_hidden = 4 # start small
         self.n_outputs = 3 # thigh, leg, foot joints
         self.initializer = tf.contrib.layers.variance_scaling_initializer()
@@ -48,22 +48,28 @@ class Model():
 
 
     def build(self):
-        self.X = tf.placeholder(tf.float32, shape=(None, self.n_inputs), name="X_marks_the_spot")
-        self.y = tf.placeholder(tf.float32, shape=(None, self.n_outputs), name="y_is_it")
+        with tf.variable_scope("NN", reuse=tf.AUTO_REUSE):
+            self.X = tf.placeholder(tf.float32, shape=(None, self.n_inputs), name="X_marks_the_spot")
+            self.y = tf.placeholder(tf.float32, shape=(None, self.n_outputs), name="y_is_it")
 
-        hidden = tf.layers.dense(self.X, self.n_hidden, activation=tf.nn.elu,
+            hidden = tf.layers.dense(self.X, self.n_hidden, activation=tf.nn.elu,
 kernel_initializer=self.initializer)
-        logits = tf.layers.dense(hidden, self.n_outputs,
+            logits = tf.layers.dense(hidden, self.n_outputs,
 kernel_initializer=self.initializer)
-        self.actions = tf.nn.softmax(logits)
+            self.actions = tf.nn.softmax(logits)
 
-        self.loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.y, logits=self.actions)
-        self.optimizer = tf.train.AdamOptimizer(self.lr)
-        self.grads_and_vars = self.optimizer.compute_gradients(self.loss)
-        self.minimize = self.optimizer.minimize(self.loss)
-        self.init = tf.global_variables_initializer()
+            self.loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.y, logits=self.actions)
+            self.optimizer = tf.train.AdamOptimizer(self.lr)
+            self.grads_and_vars = self.optimizer.compute_gradients(self.loss)
+            self.minimize = self.optimizer.minimize(self.loss)
+            self.init = tf.global_variables_initializer()
 
-    def plot(self, steps=0, losses=[], rewards=[]):
+    def adjust_learning_rate(self, new_learning_rate):
+        self.lr = new_learning_rate
+        with tf.variable_scope("NN", reuse=tf.AUTO_REUSE):
+            self.optimizer = tf.train.AdamOptimizer(self.lr)
+
+    def plot(self, steps=0, losses=[], rewards=[], epoch=0):
         if X_SERVER:
             fig = plt.figure()
             plt.title("Loss and reward over steps trained")
@@ -76,7 +82,7 @@ kernel_initializer=self.initializer)
             sns.tsplot(time=range(steps), data=losses, linestyle='-')
             fig.add_subplot(1,2,2)
             sns.tsplot(time=range(len(rewards)), data=np.reshape(rewards, -1), linestyle="-")
-            plt.savefig("output/{0}.png".format(self.nn_name))
+            plt.savefig("output/{0}_{1}.png".format(self.nn_name, epoch))
         else:
             print("The reward {0} and loss {1} means".format(np.mean(rewards),
 np.mean(losses)))
@@ -87,9 +93,12 @@ verbose=100, sample=500):
         losses = []
         rewards = []
         reward_cum = 0
-
+        print("Epoch {}".format(epoch))
         with tf.Session() as sess:
-            sess.run(self.init)
+            if(epoch==0):
+                sess.run(self.init)
+            else:
+                self.load_weights(sess)
             obs = self.env.reset()
             batch_size = 600 # if the num_steps == 300 then this batch is 2 rollouts
             steps = int(X_train.shape[0]/batch_size)
@@ -131,7 +140,8 @@ verbose=100, sample=500):
                     self.save_weights(sess)
 
             # this works when we have rewards # self.plot(steps=len(rewards), rewards=rewards, losses=losses)
-            self.plot(steps=len(losses), rewards=rewards, losses=losses)
+            self.plot(steps=len(losses), rewards=rewards, losses=losses, epoch=epoch)
+            return losses, rewards
 
     def run(self, actions, step=0, render=False):
         """
@@ -168,4 +178,8 @@ verbose=100, sample=500):
         if not os.path.exists(self.weights_path):
             os.makedirs(self.weights_path)
         saver.save(sess, self.weights_path)
+
+    def load_weights(self, sess):
+        saver = tf.train.Saver()
+        saver.restore(sess, self.weights_path)
 
