@@ -33,10 +33,10 @@ from util import render_hopper, plot_animation, epoch
 class Model():
     """Class that defines the model that learns from the expert behavior"""
     def __init__(self, args):
-        self.lr = 0.01
+        self.lr = 0.001
         self.l2 = 0.05
         self.n_inputs = 15 ##15 obs on the roboschool hopper, 11 observations for the mujoco hopper
-        self.n_hidden = 170 # start small
+        self.n_hidden = 4 # start small
         self.n_outputs = 3 # thigh, leg, foot joints
         self.initializer = tf.contrib.layers.variance_scaling_initializer()
         print("Env name {0}".format(args.envname))	
@@ -56,40 +56,20 @@ class Model():
 
             hidden = tf.layers.dense(self.X, self.n_hidden, activation=tf.nn.elu,
 kernel_initializer=self.initializer)
-            logits = tf.layers.dense(hidden, self.n_outputs,
+            self.logits = tf.layers.dense(hidden, self.n_outputs,
 kernel_initializer=self.initializer)
-            self.actions = tf.nn.softmax(logits)
+            self.actions = self.logits
+            #self.actions = tf.nn.softmax(self.logits)
+            self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=self.y, logits=self.actions))
 
             #self.loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.y, logits=self.actions)
-            self.loss = tf.nn.softmax_cross_entropy_with_logits(labels=self.y, logits=self.actions)
-            #self.optimizer = tf.train.AdamOptimizer(self.lr)
-            self.optimizer = tf.train.GradientDescentOptimizer(self.lr)
+            #self.loss = tf.nn.softmax_cross_entropy_with_logits(labels=self.y, logits=self.actions)
+            self.optimizer = tf.train.AdamOptimizer(self.lr)
+            #self.optimizer = tf.train.GradientDescentOptimizer(self.lr)
             #self.grads_and_vars = self.optimizer.compute_gradients(self.loss)
             self.minimize = self.optimizer.minimize(self.loss)
             self.init = tf.global_variables_initializer()
 
-    def adjust_learning_rate(self, new_learning_rate):
-        self.lr = new_learning_rate
-        with tf.variable_scope("NN", reuse=tf.AUTO_REUSE):
-            self.optimizer = tf.train.GradientDescentOptimizer(self.lr)
-
-    def plot(self, steps=0, losses=[], rewards=[], epoch=0):
-        if X_SERVER:
-            fig = plt.figure()
-            plt.title("Loss and reward over steps trained")
-            plt.axis("off")
-
-            #df = pd.DataFrame()
-            #df['losses'] = losses
-            #df['rewards'] = rewards
-            fig.add_subplot(1,2,1)
-            sns.tsplot(time=range(steps), data=losses, linestyle='-')
-            fig.add_subplot(1,2,2)
-            sns.tsplot(time=range(len(rewards)), data=np.reshape(rewards, -1), linestyle="-")
-            plt.savefig("output/{0}_{1}.png".format(self.nn_name, epoch))
-        else:
-            print("The reward {0} and loss {1} means".format(np.mean(rewards),
-np.mean(losses)))
 
 
     def fit(self, X_train, y_train, batch_size, epoch, n_max_steps=1000,
@@ -109,7 +89,7 @@ verbose=100, sample=500):
                 sess.run(self.init)
                 print('Weights not found {0}'.format(e))
             obs = self.env.reset()
-            batch_size = X_train.shape[0] # if the num_steps == 300 then this batch is 2 rollouts
+            batch_size = 60 #X_train.shape[0] # if the num_steps == 300 then this batch is 2 rollouts
             steps = int(X_train.shape[0]/batch_size)
             for step in range(steps):
 
@@ -123,6 +103,9 @@ verbose=100, sample=500):
                     self.X: X_train[step*batch_size:(step+1)*batch_size],
                     self.y: y_train[step*batch_size:(step+1)*batch_size]
                 }
+                #print(y_train[step])
+                #print(sess.run(self.logits[step], feed_dict=feed_dict))
+                #pdb.set_trace()
                 loss = sess.run(self.loss, feed_dict=feed_dict )
                 losses.append(np.mean(loss))
 
@@ -189,4 +172,27 @@ verbose=100, sample=500):
     def load_weights(self, sess):
         saver = tf.train.Saver()
         saver.restore(sess, self.weights_path)
+
+    def adjust_learning_rate(self, new_learning_rate):
+        self.lr = new_learning_rate
+        with tf.variable_scope("NN", reuse=tf.AUTO_REUSE):
+            self.optimizer = tf.train.GradientDescentOptimizer(self.lr)
+
+    def plot(self, steps=0, losses=[], rewards=[], epoch=0):
+        if X_SERVER:
+            fig = plt.figure()
+            plt.title("Loss and reward over steps trained")
+            plt.axis("off")
+
+            #df = pd.DataFrame()
+            #df['losses'] = losses
+            #df['rewards'] = rewards
+            fig.add_subplot(1,2,1)
+            sns.tsplot(time=range(steps), data=losses, linestyle='-')
+            fig.add_subplot(1,2,2)
+            sns.tsplot(time=range(len(rewards)), data=np.reshape(rewards, -1), linestyle="-")
+            plt.savefig("output/{0}_{1}.png".format(self.nn_name, epoch))
+        else:
+            print("The reward {0} and loss {1} means".format(np.mean(rewards),
+np.mean(losses)))
 

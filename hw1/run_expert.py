@@ -71,7 +71,9 @@ def BatchGenerator(args):
             if steps >= max_steps:
                 break
         returns.append(totalr)
-        yield np.array(observations), np.array(actions)
+        #Commenting this out would enable an "online" method
+        #of providing new training data
+        #yield np.array(observations), np.array(actions)
 
         #it would make sense to yield here so that we're getting just one execution at a time
 
