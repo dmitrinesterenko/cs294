@@ -12,7 +12,7 @@ try:
 except ImportError:
      X_SERVER=False
      print("No X support")
-from util import render_hopper, plot_animation
+from util import render_hopper, plot_animation, epoch
 
 
 
@@ -36,16 +36,18 @@ class Model():
         self.lr = 0.01
         self.l2 = 0.05
         self.n_inputs = 15 ##15 obs on the roboschool hopper, 11 observations for the mujoco hopper
-        self.n_hidden = 4 # start small
+        self.n_hidden = 170 # start small
         self.n_outputs = 3 # thigh, leg, foot joints
         self.initializer = tf.contrib.layers.variance_scaling_initializer()
         print("Env name {0}".format(args.envname))	
         self.env = gym.make(args.envname)
         self.render = args.render
-        self.nn_name = "nn_{0}_{1}_{2}".format(self.lr, self.l2, self.n_hidden)
+        self.nn_name = "nn_{0}_{1}_{2}_{3}".format(self.lr, self.l2, self.n_hidden, epoch())
         self.weights_path = "weights/{0}".format(self.nn_name)
 
-
+    def initialize(self):
+        with tf.Session() as sess:
+            sess.run(self.init)
 
     def build(self):
         with tf.variable_scope("NN", reuse=tf.AUTO_REUSE):
@@ -110,8 +112,6 @@ verbose=100, sample=500):
                 # thus it's important to actually refer to self.X (or however you
                 # would access the placeholder variable in the current function
                 # scope)
-
-                #TODO: need to run the batches on X_train[batch_num-1*batch_size:batch_num*batch_size]
                 feed_dict = {
                     self.X: X_train[step*batch_size:(step+1)*batch_size],
                     self.y: y_train[step*batch_size:(step+1)*batch_size]
