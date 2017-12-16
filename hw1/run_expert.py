@@ -71,6 +71,9 @@ def BatchGenerator(args):
             if steps >= max_steps:
                 break
         returns.append(totalr)
+        yield np.array(observations), np.array(actions)
+
+        #it would make sense to yield here so that we're getting just one execution at a time
 
     print('returns', returns)
     print('mean return', np.mean(returns))
@@ -107,13 +110,16 @@ if __name__ == '__main__':
 
     model = Model(args)
     model.build()
-
+    model.initialize()
     # The shape is (10*num_rollouts, 11) for X and (10*num_rollouts, 3) for y
     all_loss_history = []
     prev_epoch_loss = float('inf')
     anneal_threshold = 0.99
     anneal_by = 1.5
+    num_rolled =  0
     for X, y in BatchGenerator(args):
+        num_rolled += 1
+        print("num rolled {0}".format(num_rolled))
         # TODO:
         # keep some of the X and y for validation and test sets
         for epoch in range(args.epochs):
@@ -122,9 +128,9 @@ if __name__ == '__main__':
             print("mean epoch loss {0} and reward {1}".format(epoch_loss, np.mean(rewards)))
 
             all_loss_history.extend(losses)
-            if(epoch_loss>prev_epoch_loss*anneal_threshold):
+            #if(epoch_loss>prev_epoch_loss*anneal_threshold):
                     # should update learning rate as our loss is not decreasing enough between epochs
-                    print("adjusting learning rate {0}".format(model.lr/anneal_by))
-                    model.adjust_learning_rate(model.lr/anneal_by)
+                    #print("adjusting learning rate {0}".format(model.lr/anneal_by))
+                    #model.adjust_learning_rate(model.lr/anneal_by)
             prev_epoch_loss = epoch_loss
 

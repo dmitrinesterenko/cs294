@@ -60,16 +60,18 @@ kernel_initializer=self.initializer)
 kernel_initializer=self.initializer)
             self.actions = tf.nn.softmax(logits)
 
-            self.loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.y, logits=self.actions)
-            self.optimizer = tf.train.AdamOptimizer(self.lr)
-            self.grads_and_vars = self.optimizer.compute_gradients(self.loss)
+            #self.loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.y, logits=self.actions)
+            self.loss = tf.nn.softmax_cross_entropy_with_logits(labels=self.y, logits=self.actions)
+            #self.optimizer = tf.train.AdamOptimizer(self.lr)
+            self.optimizer = tf.train.GradientDescentOptimizer(self.lr)
+            #self.grads_and_vars = self.optimizer.compute_gradients(self.loss)
             self.minimize = self.optimizer.minimize(self.loss)
             self.init = tf.global_variables_initializer()
 
     def adjust_learning_rate(self, new_learning_rate):
         self.lr = new_learning_rate
         with tf.variable_scope("NN", reuse=tf.AUTO_REUSE):
-            self.optimizer = tf.train.AdamOptimizer(self.lr)
+            self.optimizer = tf.train.GradientDescentOptimizer(self.lr)
 
     def plot(self, steps=0, losses=[], rewards=[], epoch=0):
         if X_SERVER:
@@ -97,12 +99,17 @@ verbose=100, sample=500):
         reward_cum = 0
         print("Epoch {}".format(epoch))
         with tf.Session() as sess:
-            if(epoch==0):
-                sess.run(self.init)
-            else:
+            #if(epoch==0):
+            #    sess.run(self.init)
+            #else:
+            #    self.load_weights(sess)
+            try:
                 self.load_weights(sess)
+            except Exception as e:
+                sess.run(self.init)
+                print('Weights not found {0}'.format(e))
             obs = self.env.reset()
-            batch_size = 600 # if the num_steps == 300 then this batch is 2 rollouts
+            batch_size = X_train.shape[0] # if the num_steps == 300 then this batch is 2 rollouts
             steps = int(X_train.shape[0]/batch_size)
             for step in range(steps):
 
@@ -140,7 +147,7 @@ verbose=100, sample=500):
                     self.save_weights(sess)
 
             # this works when we have rewards # self.plot(steps=len(rewards), rewards=rewards, losses=losses)
-            self.plot(steps=len(losses), rewards=rewards, losses=losses, epoch=epoch)
+            #self.plot(steps=len(losses), rewards=rewards, losses=losses, epoch=epoch)
             return losses, rewards
 
     def run(self, actions, step=0, render=False):
