@@ -33,7 +33,7 @@ from util import render_hopper, plot_animation, epoch
 class Model():
     """Class that defines the model that learns from the expert behavior"""
     def __init__(self, args):
-        self.lr = 0.001
+        self.lr = 0.01
         self.l2 = 0.05
         self.n_inputs = 15 ##15 obs on the roboschool hopper, 11 observations for the mujoco hopper
         self.n_hidden = 4 # start small
@@ -59,9 +59,12 @@ kernel_initializer=self.initializer)
             self.logits = tf.layers.dense(hidden, self.n_outputs,
 kernel_initializer=self.initializer)
             self.actions = self.logits
-            #self.actions = tf.nn.softmax(self.logits)
-            self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=self.y, logits=self.actions))
+            #action_mask = tf.one_hot(self.action, self.action_size, 1.0, 0.0)
+            #self.actions = tf.reduce_sum(self.logits * action_mask, 1)
 
+            #self.actions = tf.nn.softmax(self.logits)
+            #self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=self.y, logits=self.actions))
+            self.loss = tf.reduce_mean(tf.square(tf.subtract(self.y, self.actions)))
             #self.loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.y, logits=self.actions)
             #self.loss = tf.nn.softmax_cross_entropy_with_logits(labels=self.y, logits=self.actions)
             self.optimizer = tf.train.AdamOptimizer(self.lr)
@@ -92,7 +95,7 @@ verbose=100, sample=500):
             batch_size = 60 #X_train.shape[0] # if the num_steps == 300 then this batch is 2 rollouts
             steps = int(X_train.shape[0]/batch_size)
             for step in range(steps):
-
+                step = 0
                 # FUN FACT: if you try to create a feed_dict like {X: X_train} where
                 # X is not actually in scope in this function you will get a strange
                 # seeming error that refers to Not a hashable type 'np.ndarray'
@@ -124,10 +127,15 @@ verbose=100, sample=500):
                 # reward_cum = np.sum(rewards)
 
                 if step*batch_size % verbose == 0:
-                    rewards_return = self.run(sess.run(self.actions, feed_dict=feed_dict), step, render=False)
-                    rewards.append(rewards_return)
-                    print("Step {0}/{3}: Loss {1}, Reward {2}".format(step*batch_size, np.mean(loss), np.sum(rewards_return), steps*batch_size))
+                    print("Step {0}/{2}: Loss {1}".format(step*batch_size, np.mean(loss), steps*batch_size))
                     self.save_weights(sess)
+
+            #TODO
+            #Should use x_validation and y_validation to get the actions here
+            feed_dict = { self.X : X_train,
+                          self.y : y_train}
+            rewards_return = self.run(sess.run(self.actions, feed_dict=feed_dict), step, render=False)
+            rewards.append(rewards_return)
 
             # this works when we have rewards # self.plot(steps=len(rewards), rewards=rewards, losses=losses)
             #self.plot(steps=len(losses), rewards=rewards, losses=losses, epoch=epoch)
@@ -155,9 +163,9 @@ verbose=100, sample=500):
             if render:
                 img = render_hopper(self.env, obs)
                 frames.append(img)
-            #if done:
-            #    print("We are done at step {0}".format(i))
-            #    break
+            if done:
+                print("We are done at step {0}".format(i))
+                break
         rewards.append(reward_cum)
         if render:
             animation = plot_animation(frames, repeat=True, step=step)

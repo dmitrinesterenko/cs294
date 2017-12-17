@@ -4,6 +4,7 @@ import matplotlib
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import gym
+import numpy as np
 
 def epoch():
     return int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds())
@@ -33,8 +34,8 @@ def plot_environment(env, figsize=(5,4)):
 
 def try_action(env, action):
     o = env.reset()
-    for i in xrange(100): # repeat one action for five times
-        o = env.step(action)[0]
+    for i in range(5): # repeat one action for five times
+        o = env.step(np.asarray(action))
     plot_environment(env)
 
 def update_scene(num, frames, patch):

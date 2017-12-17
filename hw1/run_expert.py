@@ -36,14 +36,15 @@ def BatchGenerator(args):
         module_name = module_name[:-3]
     policy_module = importlib.import_module(module_name)
     print('loaded')
-	# TRIAL
-        #try_action(env, [0,0,1])
-        #try_action(env, [0,1,0])
-        #try_action(env, [1,0,0])
-        #END TRIAL
-
     env, policy = policy_module.get_env_and_policy()
     print("The action space is {0}".format(env.action_space))
+
+    # TRIAL
+    #try_action(env, [0,0,10])
+    #try_action(env, [0,0,-10])
+    #try_action(env, [0,-10,0])
+    try_action(env, [-10,0,0])
+    ##END TRIAL
 
     max_steps = args.max_timesteps or env.spec.timestep_limit
 
@@ -80,6 +81,10 @@ def BatchGenerator(args):
     print('returns', returns)
     print('mean return', np.mean(returns))
     print('std of return', np.std(returns))
+    print('max action', np.max(actions))
+    print('min action', np.min(actions))
+    #print('means_of_actions', np.mean(actions, axis=1))
+
 	
     if X_SERVER:
         fig = plt.figure()
@@ -125,9 +130,9 @@ if __name__ == '__main__':
         # TODO:
         # keep some of the X and y for validation and test sets
         for epoch in range(args.epochs):
-            losses, rewards = model.fit(X, y, batch_size=32, epoch=epoch, n_max_steps=1000, sample=500, verbose=100)
+            losses, rewards = model.fit(X, y, batch_size=32, epoch=epoch, n_max_steps=1000, sample=500, verbose=400)
             epoch_loss = np.mean(losses)
-            print("mean epoch loss {0} and reward {1}".format(epoch_loss, np.mean(rewards)))
+            print("Epoch {0}/{1}: Loss {2}, Reward {3}".format(epoch, args.epochs, epoch_loss, rewards))
 
             all_loss_history.extend(losses)
             #if(epoch_loss>prev_epoch_loss*anneal_threshold):
