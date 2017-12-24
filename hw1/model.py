@@ -36,7 +36,7 @@ class Model():
         self.lr = 0.01
         self.l2 = 0.05
         self.n_inputs = 15 ##15 obs on the roboschool hopper, 11 observations for the mujoco hopper
-        self.n_hidden = 4 # start small
+        self.n_hidden = 170 # start small
         self.n_outputs = 3 # thigh, leg, foot joints
         self.initializer = tf.contrib.layers.variance_scaling_initializer()
         print("Env name {0}".format(args.envname))	
@@ -63,9 +63,14 @@ kernel_initializer=self.initializer)
             #self.actions = tf.reduce_sum(self.logits * action_mask, 1)
 
             #self.actions = tf.nn.softmax(self.logits)
+            ## Sigmoid Cross Entropy
             #self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=self.y, logits=self.actions))
-            self.loss = tf.reduce_mean(tf.square(tf.subtract(self.y, self.actions)))
+            ## MSE
+            #self.loss = tf.reduce_mean(tf.square(tf.subtract(self.y, self.actions)))
+            ## Euclidean distance
+            self.loss = tf.sqrt(tf.reduce_mean(tf.square(tf.subtract(self.y, self.actions))))
             #self.loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.y, logits=self.actions)
+            ## Softmax
             #self.loss = tf.nn.softmax_cross_entropy_with_logits(labels=self.y, logits=self.actions)
             self.optimizer = tf.train.AdamOptimizer(self.lr)
             #self.optimizer = tf.train.GradientDescentOptimizer(self.lr)
@@ -95,7 +100,6 @@ verbose=100, sample=500):
             batch_size = 60 #X_train.shape[0] # if the num_steps == 300 then this batch is 2 rollouts
             steps = int(X_train.shape[0]/batch_size)
             for step in range(steps):
-                step = 0
                 # FUN FACT: if you try to create a feed_dict like {X: X_train} where
                 # X is not actually in scope in this function you will get a strange
                 # seeming error that refers to Not a hashable type 'np.ndarray'
@@ -134,12 +138,12 @@ verbose=100, sample=500):
             #Should use x_validation and y_validation to get the actions here
             feed_dict = { self.X : X_train,
                           self.y : y_train}
-            rewards_return = self.run(sess.run(self.actions, feed_dict=feed_dict), step, render=False)
+            rewards_return, steps = self.run(sess.run(self.actions, feed_dict=feed_dict), step, render=False)
             rewards.append(rewards_return)
 
             # this works when we have rewards # self.plot(steps=len(rewards), rewards=rewards, losses=losses)
             #self.plot(steps=len(losses), rewards=rewards, losses=losses, epoch=epoch)
-            return losses, rewards
+            return losses, rewards, steps
 
     def run(self, actions, step=0, render=False):
         """
@@ -157,6 +161,7 @@ verbose=100, sample=500):
         frames = []
         rewards = []
         reward_cum = 0
+        steps_taken = 0
         for i in range(actions.shape[0]):
             obs, reward, done, info = self.env.step(actions[i])
             reward_cum += reward
@@ -166,10 +171,11 @@ verbose=100, sample=500):
             if done:
                 print("We are done at step {0}".format(i))
                 break
+            steps_taken = i
         rewards.append(reward_cum)
         if render:
             animation = plot_animation(frames, repeat=True, step=step)
-        return rewards
+        return rewards, i
 
     def save_weights(self, sess):
         saver = tf.train.Saver()
